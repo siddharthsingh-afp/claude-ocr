@@ -154,10 +154,10 @@ def call_claude(model, image_bytes, mime):
 
 
 # ---------------------------------------------------------------------------
-# Decide whether Haiku's result is weak enough to escalate to Sonnet
+# Decide whether to escalate Haiku -> Sonnet
+# RULE: Handwritten -> Sonnet. Everything else -> Haiku.
 # ---------------------------------------------------------------------------
 def _iter_items(data):
-    """Yield every extracted item that carries a 'confidence' field."""
     fields = data.get("fields") or {}
     for key in ("medicines", "tests", "items"):
         for it in (fields.get(key) or []):
@@ -165,29 +165,15 @@ def _iter_items(data):
                 yield it
 
 def needs_upgrade(data):
-    # 1) call failed or JSON unparseable -> upgrade
+    # Unparseable / error -> Sonnet as last resort
     if data.get("error") or not data.get("_call", {}).get("parse_ok", False):
         return True, "haiku_unparseable_or_error"
 
-    # 2) missing type or low type confidence -> upgrade
-    dtype = data.get("document_type")
-    tconf = (data.get("type_confidence") or "").lower()
-    if not dtype:
-        return True, "no_document_type"
-    if tconf == "low":
-        return True, "low_type_confidence"
+    # ONLY trigger: handwritten -> Sonnet
+    if data.get("is_handwritten") is True:
+        return True, "handwritten_routed_to_sonnet"
 
-    # 3) too many low-confidence extracted items -> upgrade
-    items = list(_iter_items(data))
-    if items:
-        lows = sum(1 for it in items if (it.get("confidence") or "").lower() == "low")
-        if lows / len(items) >= UPGRADE_LOW_RATIO:
-            return True, f"low_item_confidence_{lows}/{len(items)}"
-
-    # 4) handwritten and not clearly confident -> upgrade (handwriting is Haiku's weak spot)
-    if data.get("is_handwritten") is True and tconf != "high":
-        return True, "handwritten_not_high_confidence"
-
+    # Everything else (printed, mixed, unknown) -> keep Haiku result
     return False, "haiku_sufficient"
 
 

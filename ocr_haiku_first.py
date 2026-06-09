@@ -251,6 +251,17 @@ def extract(image_bytes, mime):
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+import pathlib
+
+HTML_PAGE = pathlib.Path(__file__).parent / "ocr_test_page.html"
+
+@app.route("/", methods=["GET"])
+def index():
+    if HTML_PAGE.exists():
+        return HTML_PAGE.read_text(), 200, {"Content-Type": "text/html"}
+    return "<h2>Claude OCR Service</h2><p>POST /compare with form field 'image'</p>", 200
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "fast": MODEL_FAST, "strong": MODEL_STRONG})

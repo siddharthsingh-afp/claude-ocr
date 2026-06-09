@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude OCR — Document Reader</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#F0F2F5;
+  --card:#FFFFFF;
+  --ink:#111827;
+  --muted:#6B7280;
+  --line:#E5E7EB;
+  --blue:#2563EB;
+  --blue-light:#EFF6FF;
+  --green:#059669;
+  --green-light:#ECFDF5;
+  --amber:#D97706;
+  --amber-light:#FFFBEB;
+  --red:#DC2626;
+  --red-light:#FEF2F2;
+  --shadow:0 1px 3px rgba(0,0,0,.08),0 8px 24px rgba(0,0,0,.06);
+}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;padding:32px 16px 80px}
+.wrap{max-width:720px;margin:0 auto}
+
+/* Header */
+.header{margin-bottom:28px}
+.header-top{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.logo{width:36px;height:36px;background:var(--blue);border-radius:10px;display:grid;place-items:center;flex-shrink:0}
+.logo svg{color:#fff}
+h1{font-size:22px;font-weight:700;letter-spacing:-.02em}
+.subtitle{font-size:14px;color:var(--muted);line-height:1.5}
+
+/* Server bar */
+.server-bar{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-bottom:20px;box-shadow:var(--shadow)}
+.server-bar label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap}
+.server-bar input{flex:1;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink);background:transparent;min-width:0}
+.dot{width:8px;height:8px;border-radius:50%;background:#D1D5DB;flex-shrink:0}
+.dot.live{background:var(--green)}
+
+/* Upload zone */
+.upload-zone{background:var(--card);border:2px dashed var(--line);border-radius:16px;padding:40px 24px;text-align:center;cursor:pointer;transition:.15s;box-shadow:var(--shadow);margin-bottom:20px}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--blue);background:var(--blue-light)}
+.upload-icon{width:52px;height:52px;background:var(--blue-light);border-radius:14px;display:grid;place-items:center;margin:0 auto 14px;color:var(--blue)}
+.upload-title{font-size:16px;font-weight:600;margin-bottom:4px}
+.upload-hint{font-size:13px;color:var(--muted);margin-bottom:18px}
+.upload-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.btn{font-family:'Inter',sans-serif;font-size:13px;font-weight:600;border:none;border-radius:8px;padding:10px 18px;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:7px}
+.btn-primary{background:var(--blue);color:#fff}.btn-primary:hover{background:#1D4ED8}
+.btn-ghost{background:var(--blue-light);color:var(--blue)}.btn-ghost:hover{background:#DBEAFE}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+input[type=file]{display:none}
+
+/* Preview */
+.preview-box{display:none;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);margin-bottom:20px}
+.preview-box.show{display:block}
+.preview-img{width:100%;max-height:300px;object-fit:contain;background:#1F2937;display:block}
+.preview-foot{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;gap:10px}
+.preview-name{font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-analyze{background:var(--blue);color:#fff;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;border:none;border-radius:8px;padding:10px 20px;cursor:pointer;transition:.15s;white-space:nowrap}
+.btn-analyze:hover{background:#1D4ED8}
+.btn-analyze:disabled{opacity:.45;cursor:not-allowed}
+
+/* Status */
+.status-bar{display:none;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:20px;box-shadow:var(--shadow)}
+.status-bar.show{display:flex}
+.status-bar.err{background:var(--red-light);border-color:#FECACA}
+.spinner{width:20px;height:20px;border:2.5px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.status-msg{font-size:13.5px;color:var(--muted)}
+.status-bar.err .status-msg{color:var(--red)}
+
+/* Result card */
+.result{display:none;animation:up .35s ease}
+.result.show{display:block}
+@keyframes up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* Type banner */
+.type-banner{border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:flex-start;gap:12px}
+.type-banner.prescription{background:#EFF6FF;border:1px solid #BFDBFE}
+.type-banner.lab_report{background:#F0FDF4;border:1px solid #BBF7D0}
+.type-banner.bill{background:#FFFBEB;border:1px solid #FDE68A}
+.type-banner.imaging{background:#F5F3FF;border:1px solid #DDD6FE}
+.type-banner.discharge{background:#FFF1F2;border:1px solid #FECDD3}
+.type-banner.other{background:#F9FAFB;border:1px solid var(--line)}
+.type-icon{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;flex-shrink:0}
+.type-banner.prescription .type-icon{background:#DBEAFE;color:#1D4ED8}
+.type-banner.lab_report    .type-icon{background:#DCFCE7;color:#059669}
+.type-banner.bill          .type-icon{background:#FEF3C7;color:#D97706}
+.type-banner.imaging       .type-icon{background:#EDE9FE;color:#7C3AED}
+.type-banner.discharge     .type-icon{background:#FFE4E6;color:#DC2626}
+.type-banner.other         .type-icon{background:var(--line);color:var(--muted)}
+.type-label{font-size:18px;font-weight:700;letter-spacing:-.01em}
+.type-pills{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.pill{font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;display:inline-flex;align-items:center;gap:4px}
+.pill-blue{background:#DBEAFE;color:#1D4ED8}
+.pill-green{background:#DCFCE7;color:#059669}
+.pill-amber{background:#FEF3C7;color:#D97706}
+.pill-gray{background:#F3F4F6;color:var(--muted)}
+.type-sum{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5}
+
+/* Meta grid */
+.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:14px}
+.meta-cell{background:var(--card);padding:11px 14px}
+.meta-cell.full{grid-column:1/-1}
+.meta-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:2px}
+.meta-val{font-size:14px;font-weight:500}
+.meta-val.nil{color:#D1D5DB;font-weight:400;font-style:italic}
+
+/* Section */
+.section{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:14px;box-shadow:var(--shadow)}
+.sec-head{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+.sec-title{font-size:14px;font-weight:700}
+.sec-count{font-size:11px;font-weight:600;background:var(--bg);padding:2px 8px;border-radius:12px;color:var(--muted)}
+.sec-body{padding:4px 16px 12px}
+.item{padding:10px 0;border-bottom:1px dashed var(--line)}
+.item:last-child{border:none}
+.item-name{font-size:14px;font-weight:600;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.item-detail{font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.5}
+.conf{font-size:10px;font-weight:700;padding:1px 7px;border-radius:6px;text-transform:uppercase}
+.conf.high{background:var(--green-light);color:var(--green)}
+.conf.medium{background:var(--amber-light);color:var(--amber)}
+.conf.low{background:var(--red-light);color:var(--red)}
+.flag-badge{font-size:10px;font-weight:700;padding:1px 7px;border-radius:6px;background:var(--green-light);color:var(--green)}
+.flag-badge.abnormal{background:var(--red-light);color:var(--red)}
+
+/* EDD highlight */
+.edd-banner{background:linear-gradient(135deg,#FDF4FF,#FAF5FF);border:1px solid #E9D5FF;border-radius:12px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px}
+.edd-ico{font-size:24px}
+.edd-label{font-size:11px;font-weight:600;color:#7C3AED;text-transform:uppercase;letter-spacing:.06em}
+.edd-date{font-size:20px;font-weight:700;color:#6D28D9;letter-spacing:-.01em}
+.edd-sub{font-size:12px;color:#A78BFA;margin-top:1px}
+
+/* Raw text */
+details summary{cursor:pointer;list-style:none}
+details summary::-webkit-details-marker{display:none}
+.raw-text{font-family:'JetBrains Mono',monospace;font-size:11.5px;line-height:1.65;color:var(--muted);white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto;padding:4px 0}
+
+/* Meta footer */
+.meta-footer{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 0 0;font-size:11.5px;color:var(--muted)}
+.meta-footer b{color:var(--ink)}
+.divider{color:var(--line)}
+
+.empty{color:var(--muted);font-style:italic;font-size:13px;padding:8px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header">
+    <div class="header-top">
+      <div class="logo">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+        </svg>
+      </div>
+      <h1>Claude OCR</h1>
+    </div>
+    <p class="subtitle">Upload any medical document. Claude reads it, detects the type, and extracts all the details — prescriptions, lab reports, bills, imaging, discharge summaries, and EDD for maternity.</p>
+  </div>
+
+  <!-- Server bar -->
+  <div class="server-bar">
+    <label>Server</label>
+    <input id="serverUrl" type="text" spellcheck="false" value="https://claude-ocr.onrender.com">
+    <div class="dot" id="statusDot"></div>
+  </div>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="dropzone">
+    <div class="upload-icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+        <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+      </svg>
+    </div>
+    <div class="upload-title">Drop a document here</div>
+    <div class="upload-hint">Prescription · Lab Report · Bill · Imaging · Discharge · Maternity</div>
+    <div class="upload-btns">
+      <button class="btn btn-primary" id="chooseBtn" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Choose file
+      </button>
+      <button class="btn btn-ghost" id="cameraBtn" type="button">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Camera
+      </button>
+    </div>
+    <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.webp">
+    <input type="file" id="cameraInput" accept="image/*" capture="environment">
+  </div>
+
+  <!-- Preview -->
+  <div class="preview-box" id="previewBox">
+    <img class="preview-img" id="previewImg" alt="preview">
+    <div class="preview-foot">
+      <span class="preview-name" id="previewName"></span>
+      <button class="btn-analyze" id="analyzeBtn">Read document</button>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div class="status-bar" id="statusBar">
+    <div class="spinner" id="spinner"></div>
+    <span class="status-msg" id="statusMsg">Sending to Claude…</span>
+  </div>
+
+  <!-- Result -->
+  <div class="result" id="result"></div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let file = null;
+
+// ping /health on load to light the dot
+fetch(($('serverUrl').value||'').replace(/\/+$/,'')+'/health',{method:'GET',mode:'cors'})
+  .then(r=>r.ok && ($('statusDot').classList.add('live')))
+  .catch(()=>{});
+
+$('serverUrl').addEventListener('change', () => {
+  $('statusDot').classList.remove('live');
+  fetch(($('serverUrl').value||'').replace(/\/+$/,'')+'/health',{method:'GET',mode:'cors'})
+    .then(r=>r.ok && ($('statusDot').classList.add('live'))).catch(()=>{});
+});
+
+const dz = $('dropzone');
+$('chooseBtn').onclick = e => { e.stopPropagation(); $('fileInput').click(); };
+$('cameraBtn').onclick = e => { e.stopPropagation(); $('cameraInput').click(); };
+dz.onclick = () => $('fileInput').click();
+$('fileInput').onchange = e => handleFile(e.target.files[0]);
+$('cameraInput').onchange = e => handleFile(e.target.files[0]);
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
+
+function handleFile(f) {
+  if (!f) return;
+  file = f;
+  const r = new FileReader();
+  r.onload = e => { $('previewImg').src = e.target.result; };
+  r.readAsDataURL(f);
+  $('previewName').textContent = f.name + '  ·  ' + (f.size/1024).toFixed(0) + ' KB';
+  $('previewBox').classList.add('show');
+  $('result').classList.remove('show');
+  $('result').innerHTML = '';
+}
+
+$('analyzeBtn').onclick = analyze;
+
+async function analyze() {
+  if (!file) return;
+  const base = ($('serverUrl').value || 'https://claude-ocr.onrender.com').replace(/\/+$/, '');
+  $('analyzeBtn').disabled = true;
+  showStatus('Sending to Claude… (first request may take 30–60s if the server was asleep)', false);
+
+  const fd = new FormData();
+  fd.append('image', file);
+  try {
+    const resp = await fetch(base + '/compare', { method: 'POST', body: fd, mode: 'cors' });
+    if (!resp.ok) throw new Error('Server returned ' + resp.status);
+    const payload = await resp.json();
+    const d = normalize(payload.claude || payload);
+    hideStatus();
+    render(d);
+  } catch(e) {
+    showStatus('Error: ' + e.message, true);
+  } finally {
+    $('analyzeBtn').disabled = false;
+  }
+}
+
+function normalize(raw) {
+  const f = raw.fields || {};
+  return { ...raw, ...f,
+    document_type: raw.document_type || 'other',
+    is_handwritten: raw.is_handwritten,
+    raw_text: raw.raw_text || '',
+    edd: raw.edd || null,
+    lmp: raw.lmp || null,
+  };
+}
+
+function showStatus(msg, isErr) {
+  $('statusMsg').textContent = msg;
+  $('spinner').style.display = isErr ? 'none' : 'block';
+  $('statusBar').className = 'status-bar show' + (isErr ? ' err' : '');
+}
+function hideStatus() { $('statusBar').classList.remove('show'); }
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const nil = () => '<span class="meta-val nil">— not found</span>';
+const val = v => v ? `<span class="meta-val">${esc(v)}</span>` : nil();
+
+const TYPE_LABELS = { prescription:'Prescription', lab_report:'Lab Report', bill:'Medical Bill', imaging:'Imaging Report', discharge:'Discharge Summary', other:'Other Document' };
+const TYPE_ICONS = {
+  prescription:`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12h6m-3-3v6M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9-4.03-9-9-9z"/></svg>`,
+  lab_report:`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v11m0 0a8 8 0 1010.9 3M9 14H5a2 2 0 00-2 2v4a2 2 0 002 2h4"/></svg>`,
+  bill:`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`,
+  imaging:`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 00-2.828 0L6 21"/></svg>`,
+  discharge:`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+  other:`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+};
+
+function confBadge(c) {
+  const k = (c||'').toLowerCase();
+  return k ? `<span class="conf ${k}">${k}</span>` : '';
+}
+
+function render(d) {
+  const type = d.document_type || 'other';
+  const label = TYPE_LABELS[type] || 'Document';
+  const icon = TYPE_ICONS[type] || TYPE_ICONS.other;
+  const confPill = d.type_confidence ? `<span class="pill ${d.type_confidence==='high'?'pill-green':d.type_confidence==='medium'?'pill-amber':'pill-gray'}">${esc(d.type_confidence)} confidence</span>` : '';
+  const hwPill = d.is_handwritten === true ? '<span class="pill pill-gray">Handwritten</span>' : d.is_handwritten === false ? '<span class="pill pill-gray">Printed</span>' : '';
+  const meta = d._meta || {};
+  const routePill = meta.route ? `<span class="pill ${meta.route==='haiku'?'pill-green':'pill-amber'}">${meta.route==='haiku'?'Haiku':'Haiku → Sonnet'}</span>` : '';
+
+  let html = '';
+
+  // EDD banner if present (maternity)
+  if (d.edd) {
+    html += `<div class="edd-banner">
+      <div class="edd-ico">🤱</div>
+      <div>
+        <div class="edd-label">Expected Date of Delivery</div>
+        <div class="edd-date">${esc(d.edd)}</div>
+        ${d.lmp ? `<div class="edd-sub">LMP: ${esc(d.lmp)}</div>` : ''}
+      </div>
+    </div>`;
+  }
+
+  // Type banner
+  html += `<div class="type-banner ${type}">
+    <div class="type-icon">${icon}</div>
+    <div>
+      <div class="type-label">${esc(label)}</div>
+      <div class="type-pills">${confPill}${hwPill}${routePill}</div>
+      ${d.summary ? `<div class="type-sum">${esc(d.summary)}</div>` : ''}
+    </div>
+  </div>`;
+
+  // Meta grid
+  html += `<div class="meta-grid">
+    <div class="meta-cell"><div class="meta-lbl">Patient</div>${val(d.patient_name)}</div>
+    <div class="meta-cell"><div class="meta-lbl">Date</div>${val(d.date)}</div>
+    <div class="meta-cell"><div class="meta-lbl">Doctor</div>${val(d.doctor_name)}</div>
+    <div class="meta-cell"><div class="meta-lbl">Hospital / Clinic</div>${val(d.hospital_name)}</div>
+  </div>`;
+
+  // Type fields
+  html += renderFields(type, d);
+
+  // Raw text
+  if (d.raw_text) {
+    html += `<details class="section">
+      <summary class="sec-head" style="cursor:pointer">
+        <span class="sec-title">Full text extracted</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </summary>
+      <div class="sec-body" style="padding:12px 16px"><div class="raw-text">${esc(d.raw_text)}</div></div>
+    </details>`;
+  }
+
+  // Meta footer
+  if (meta.total_elapsed || meta.route) {
+    const upgraded = meta.upgraded ? ' · <b>Upgraded to Sonnet</b> (' + esc(meta.reason||'') + ')' : '';
+    const elapsed = meta.total_elapsed ? ` · ${meta.total_elapsed}s` : '';
+    const tokens = (meta.haiku_call||{}).output_tokens ? ` · ${(meta.haiku_call.input_tokens||0)+(meta.haiku_call.output_tokens||0)} tokens` : '';
+    html += `<div class="meta-footer">Model: <b>${meta.route==='haiku'?'Claude Haiku':'Claude Sonnet'}</b>${upgraded}${elapsed}${tokens}</div>`;
+  }
+
+  $('result').innerHTML = html;
+  $('result').classList.add('show');
+  $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderFields(type, d) {
+  if (type === 'prescription') {
+    let out = '';
+    if (d.diagnosis) out += section('Diagnosis', null, `<div class="item"><div class="item-name">${esc(d.diagnosis)}</div></div>`);
+    out += section('Medicines', (d.medicines||[]).length, renderMeds(d.medicines));
+    if ((d.tests||[]).length) out += section('Tests advised', d.tests.length, renderSimple(d.tests));
+    return out;
+  }
+  if (type === 'lab_report') return section('Test Results', (d.tests||[]).length, renderLab(d.tests));
+  if (type === 'bill') {
+    let out = section('Items / Services', (d.items||[]).length, renderItems(d.items));
+    const tots = [];
+    if (d.gst) tots.push(`<div class="meta-cell"><div class="meta-lbl">GST</div><div class="meta-val">${esc(d.gst)}</div></div>`);
+    if (d.total_amount) tots.push(`<div class="meta-cell"><div class="meta-lbl">Total</div><div class="meta-val">${esc(d.total_amount)}</div></div>`);
+    if (tots.length) out += `<div class="meta-grid">${tots.join('')}</div>`;
+    return out;
+  }
+  if (type === 'imaging') {
+    const rows = [['Scan Type',d.scan_type],['Body Part',d.body_part],['Findings',d.findings],['Impression',d.impression]].filter(r=>r[1]);
+    if (!rows.length) return '';
+    return section('Imaging Details', null, rows.map(r=>`<div class="item"><div class="meta-lbl">${r[0]}</div><div class="item-detail" style="font-size:13.5px;color:var(--ink)">${esc(r[1])}</div></div>`).join(''));
+  }
+  if (type === 'discharge') {
+    let out = `<div class="meta-grid">
+      <div class="meta-cell"><div class="meta-lbl">Admitted</div>${val(d.admission_date)}</div>
+      <div class="meta-cell"><div class="meta-lbl">Discharged</div>${val(d.discharge_date)}</div>
+    </div>`;
+    if (d.diagnosis) out += section('Diagnosis', null, `<div class="item"><div class="item-name">${esc(d.diagnosis)}</div></div>`);
+    if ((d.procedures||[]).length) out += section('Procedures', d.procedures.length, renderSimple(d.procedures));
+    if (d.instructions) out += section('Instructions', null, `<div class="item"><div class="item-detail" style="color:var(--ink)">${esc(d.instructions)}</div></div>`);
+    return out;
+  }
+  if (d.notes) return section('Notes', null, `<div class="item"><div class="item-detail" style="color:var(--ink)">${esc(d.notes)}</div></div>`);
+  return '';
+}
+
+function section(title, count, inner) {
+  const c = count != null ? `<span class="sec-count">${count}</span>` : '';
+  return `<div class="section"><div class="sec-head"><span class="sec-title">${title}</span>${c}</div><div class="sec-body">${inner || '<div class="empty">None detected.</div>'}</div></div>`;
+}
+
+function renderMeds(meds) {
+  if (!meds||!meds.length) return '<div class="empty">No medicines detected.</div>';
+  return meds.map(m => {
+    const detail = [m.strength, m.form, m.frequency, m.duration].filter(Boolean).join('  ·  ');
+    return `<div class="item">
+      <div class="item-name">${esc(m.name||'?')} ${confBadge(m.confidence)}</div>
+      ${detail ? `<div class="item-detail">${esc(detail)}</div>` : ''}
+      ${m.quantity ? `<div class="item-detail">Qty: ${esc(m.quantity)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderLab(tests) {
+  if (!tests||!tests.length) return '<div class="empty">No results detected.</div>';
+  return tests.map(t => {
+    const val2 = [t.value, t.unit].filter(Boolean).join(' ');
+    const ref = t.reference_range ? 'Ref: ' + t.reference_range : '';
+    const flag = t.flag ? `<span class="flag-badge ${['H','L','HIGH','LOW','ABNORMAL'].includes((t.flag||'').toUpperCase())?'abnormal':''}">${esc(t.flag)}</span>` : '';
+    return `<div class="item">
+      <div class="item-name">${esc(t.name||'?')} ${flag} ${confBadge(t.confidence)}</div>
+      <div class="item-detail">${val2 ? '<b>'+esc(val2)+'</b>' : ''}${val2&&ref ? '  ·  ' : ''}${esc(ref)}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderItems(items) {
+  if (!items||!items.length) return '<div class="empty">No items detected.</div>';
+  return items.map(i => `<div class="item">
+    <div class="item-name">${esc(i.description||'?')} ${confBadge(i.confidence)}</div>
+    ${i.amount ? `<div class="item-detail">Amount: ${esc(i.amount)}</div>` : ''}
+  </div>`).join('');
+}
+
+function renderSimple(arr) {
+  return (arr||[]).map(x => {
+    const name = typeof x === 'string' ? x : (x.name || JSON.stringify(x));
+    const c = typeof x === 'object' ? confBadge(x.confidence) : '';
+    return `<div class="item"><div class="item-name">${esc(name)} ${c}</div></div>`;
+  }).join('');
+}
+</script>
+</body>
+</html>
